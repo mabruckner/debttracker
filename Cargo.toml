@@ -5,3 +5,5 @@ authors = ["Mitchell Bruckner <mbruckner807@gmail.com>"]
 edition = "2018"
 
 [dependencies]
+sled = "0.24.1"
+rocket = "0.4.1"
