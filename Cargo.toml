@@ -1,0 +1,7 @@
+[package]
+name = "debttracker"
+version = "0.1.0"
+authors = ["Mitchell Bruckner <mbruckner807@gmail.com>"]
+edition = "2018"
+
+[dependencies]
