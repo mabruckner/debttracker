@@ -7,6 +7,7 @@ use serde::{Serialize, Deserialize};
 use serde::de::DeserializeOwned;
 use sled::Db;
 use bincode::{serialize, deserialize};
+use rocket_contrib::templates::Template;
 
 #[derive(Serialize, Deserialize)]
 enum DbKey {
@@ -26,11 +27,15 @@ fn set<E: Serialize>(db: &Db, key: &DbKey, value: &E) -> Result<(), Box<dyn std:
 }
 
 #[get("/")]
-fn index(base: State<Db>) -> Result<String, Box<dyn std::error::Error>> {
+fn index(base: State<Db>) -> Result<Template, Box<dyn std::error::Error>> {
     let mut visits = get::<usize>(&base, &DbKey::User("HELLO".into()))?.unwrap_or(0);
     visits += 1;
+    #[derive(Serialize)]
+    struct TestContext {
+        count: usize
+    }
     set(&base, &DbKey::User("HELLO".into()), &visits)?;
-    Ok(format!("Hello! You are visitor number {}", visits))
+    Ok(Template::render("index", &TestContext{ count: visits }))
 }
 
 fn main() {
@@ -38,6 +43,7 @@ fn main() {
     rocket::ignite()
         .mount("/", routes![index])
         .manage(database)
+        .attach(Template::fairing())
         .launch();
     print!("ENDING");
 }
