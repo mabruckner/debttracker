@@ -1,25 +1,39 @@
 #![feature(proc_macro_hygiene, decl_macro)]
 
-#[macro_use] extern crate rocket;
+#[macro_use]
+extern crate rocket;
+extern crate bcrypt;
 
+use bcrypt::{hash, verify, DEFAULT_COST};
+use bincode::{deserialize, serialize};
+use rocket::http::{Cookie, Cookies};
+use rocket::request::Form;
+use rocket::response::{status, NamedFile};
 use rocket::State;
-use rocket::response::{NamedFile, status};
-use serde::{Serialize, Deserialize};
-use serde::de::DeserializeOwned;
-use std::path::{Path, PathBuf};
-use sled::Db;
-use bincode::{serialize, deserialize};
 use rocket_contrib::templates::Template;
+use serde::de::DeserializeOwned;
+use serde::{Deserialize, Serialize};
+use sled::Db;
+use std::path::{Path, PathBuf};
 
 #[derive(Serialize, Deserialize)]
 enum DbKey {
-    User(String)
+    UsernameToPassword(String),
+    Visits(String),
 }
+
+#[derive(FromForm)]
+struct LoginData {
+    username: String,
+    password: String,
+}
+
+const USER_COOKIE_NAME: &'static str = "USER";
 
 fn get<E: DeserializeOwned>(db: &Db, key: &DbKey) -> Result<Option<E>, Box<dyn std::error::Error>> {
     Ok(match db.get(serialize(key)?)? {
         Some(x) => Some(deserialize(&x)?),
-        None => None
+        None => None,
     })
 }
 
@@ -36,7 +50,7 @@ fn files(file: PathBuf) -> Result<NamedFile, status::NotFound<()>> {
 
 #[get("/")]
 fn index(base: State<Db>) -> Result<Template, Box<dyn std::error::Error>> {
-    let mut visits = get::<usize>(&base, &DbKey::User("HELLO".into()))?.unwrap_or(0);
+    let mut visits = get::<usize>(&base, &DbKey::Visits("HELLO".into()))?.unwrap_or(0);
     visits += 1;
     #[derive(Serialize)]
     struct User {
@@ -46,21 +60,68 @@ fn index(base: State<Db>) -> Result<Template, Box<dyn std::error::Error>> {
     #[derive(Serialize)]
     struct TestContext {
         count: usize,
-        users: Vec<User>
+        users: Vec<User>,
     }
-    set(&base, &DbKey::User("HELLO".into()), &visits)?;
-    Ok(Template::render("main", &TestContext{
-        count: visits,
-        users: vec![
-            User { name: "Bert".into(), balance: 0.5 }
-        ]
-    }))
+    set(&base, &DbKey::Visits("HELLO".into()), &visits)?;
+    Ok(Template::render(
+        "main",
+        &TestContext {
+            count: visits,
+            users: vec![User {
+                name: "Bert".into(),
+                balance: 0.5,
+            }],
+        },
+    ))
+}
+
+#[post("/login", data = "<login_data>")]
+fn login(
+    mut cookies: Cookies,
+    base: State<Db>,
+    login_data: Form<LoginData>,
+) -> Result<String, Box<dyn std::error::Error>> {
+    // curl -v -X POST -d 'username=ben&password=pass' http://localhost:8000/login -H "Content-Type: application/x-www-form-urlencoded"
+    let original_password: String = match get(
+        &base,
+        &DbKey::UsernameToPassword(login_data.username.clone()),
+    ) {
+        Ok(Some(password)) => password,
+        _ => return Ok(format!("Bad")),
+    };
+
+    let is_password_correct = verify(&login_data.password, &original_password);
+
+    if is_password_correct.unwrap_or(false) {
+        cookies.add_private(Cookie::new(USER_COOKIE_NAME, login_data.username.clone()));
+        Ok(format!("Good"))
+    } else {
+        Ok(format!("Bad"))
+    }
+}
+
+#[get("/current-user")]
+fn current_user(mut cookies: Cookies) -> Result<String, Box<dyn std::error::Error>> {
+    Ok(format!(
+        "User: {}",
+        match &cookies.get_private(USER_COOKIE_NAME) {
+            Some(c) => c.value(),
+            _ => "None",
+        }
+    ))
 }
 
 fn main() {
     let database = Db::start_default("database").unwrap();
+    set(
+        &database,
+        &DbKey::UsernameToPassword("ben".to_string()),
+        &hash("pass", DEFAULT_COST).unwrap(),
+    )
+    .unwrap();
+
     rocket::ignite()
-        .mount("/", routes![index, files])
+        .mount("/", routes![index, files, login, current_user])
         .manage(database)
         .attach(Template::fairing())
         .launch();
