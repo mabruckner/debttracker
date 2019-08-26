@@ -14,6 +14,7 @@ use rocket_contrib::templates::Template;
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use sled::Db;
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
 #[derive(Serialize, Deserialize)]
@@ -75,6 +76,12 @@ fn index(base: State<Db>) -> Result<Template, Box<dyn std::error::Error>> {
     ))
 }
 
+#[get("/login")]
+fn login_form() -> Result<Template, Box<dyn std::error::Error>> {
+    let context: HashMap<&str, &str> = HashMap::new();
+    Ok(Template::render("login", context))
+}
+
 #[post("/login", data = "<login_data>")]
 fn login(
     mut cookies: Cookies,
@@ -100,6 +107,15 @@ fn login(
     }
 }
 
+#[get("/logout")]
+fn logout(mut cookies: Cookies) -> Result<String, Box<dyn std::error::Error>> {
+    if let Some(existing_cookie) = cookies.get_private(USER_COOKIE_NAME) {
+        cookies.remove_private(existing_cookie);
+    }
+
+    Ok(format!("Good"))
+}
+
 #[get("/current-user")]
 fn current_user(mut cookies: Cookies) -> Result<String, Box<dyn std::error::Error>> {
     Ok(format!(
@@ -121,7 +137,10 @@ fn main() {
     .unwrap();
 
     rocket::ignite()
-        .mount("/", routes![index, files, login, current_user])
+        .mount(
+            "/",
+            routes![index, files, login_form, login, logout, current_user],
+        )
         .manage(database)
         .attach(Template::fairing())
         .launch();
