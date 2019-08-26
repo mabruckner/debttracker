@@ -1,4 +1,4 @@
-<form action="submit-debt" method="POST">
+<form action="add-debt" method="POST">
   <select name="user">
     <option></option>
     {% for user in users %}
@@ -6,8 +6,8 @@
     {% endfor %}
   </select>
   <select name="owes">
-    <option value="owes">Owes</option>
-    <option value="is-owed">Is Owed</option>
+    <option value="Owes">Owes</option>
+    <option value="IsOwed">Is Owed</option>
   </select>
   <input type="number" name="amount" placeholder="amount" />
   <input type="submit" />

@@ -24,12 +24,24 @@ use money::*;
 enum DbKey {
     UsernameToPassword(String),
     Visits(String),
+    Debt {
+        owee: String,
+        ower: String,
+        amount: String,
+    },
 }
 
-#[derive(FromForm)]
+#[derive(Debug, FromForm)]
 struct LoginData {
     username: String,
     password: String,
+}
+
+#[derive(Debug, FromForm)]
+struct AddDebtData {
+    user: String,
+    owes: String,
+    amount: String,
 }
 
 const USER_COOKIE_NAME: &'static str = "USER";
@@ -87,6 +99,27 @@ fn index(base: State<Db>) -> Result<Template, Box<dyn std::error::Error>> {
             ],
         },
     ))
+}
+
+#[post("/add-debt", data = "<add_debt_data>")]
+fn add_debt(
+    mut cookies: Cookies,
+    base: State<Db>,
+    add_debt_data: Form<AddDebtData>,
+) -> Result<Redirect, Box<dyn std::error::Error>> {
+    println!("Saving {:?}", add_debt_data);
+    set(
+        &base,
+        &DbKey::Debt {
+            owee: add_debt_data.user.clone(),
+            ower: "ower".to_string(),
+            amount: add_debt_data.amount.clone(),
+        },
+        &hash("pass", DEFAULT_COST).unwrap(),
+    )
+    .unwrap();
+
+    Ok(Redirect::to(uri!(index)))
 }
 
 #[get("/login")]
@@ -159,7 +192,15 @@ fn main() {
     rocket::ignite()
         .mount(
             "/",
-            routes![index, files, login_form, login, logout, current_user],
+            routes![
+                index,
+                files,
+                login_form,
+                login,
+                logout,
+                current_user,
+                add_debt
+            ],
         )
         .manage(database)
         .attach(Template::fairing())
