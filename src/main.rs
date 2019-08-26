@@ -65,7 +65,7 @@ fn files(file: PathBuf) -> Result<NamedFile, status::NotFound<()>> {
 }
 
 #[get("/")]
-fn index(base: State<Db>) -> Result<Template, Box<dyn std::error::Error>> {
+fn index(base: State<Db>, cookies: Cookies) -> Result<Template, Box<dyn std::error::Error>> {
     let mut visits = get::<usize>(&base, &DbKey::Visits("HELLO".into()))?.unwrap_or(0);
     visits += 1;
     #[derive(Serialize)]
@@ -76,6 +76,7 @@ fn index(base: State<Db>) -> Result<Template, Box<dyn std::error::Error>> {
     #[derive(Serialize)]
     struct TestContext {
         count: usize,
+        current_user: String,
         users: Vec<User>,
     }
     set(&base, &DbKey::Visits("HELLO".into()), &visits)?;
@@ -83,6 +84,7 @@ fn index(base: State<Db>) -> Result<Template, Box<dyn std::error::Error>> {
         "main",
         &TestContext {
             count: visits,
+            current_user: get_current_user(cookies).unwrap_or("None".to_string()),
             users: vec![
                 User {
                     username: "bert".into(),
@@ -178,6 +180,13 @@ fn check_auth(mut cookies: Cookies) -> Option<Redirect> {
         return Some(Redirect::to(uri!(login)));
     }
     return None;
+}
+
+fn get_current_user(mut cookies: Cookies) -> Option<String> {
+    match &cookies.get_private(USER_COOKIE_NAME) {
+        Some(c) => Some(c.value().to_string()),
+        _ => None,
+    }
 }
 
 fn main() {

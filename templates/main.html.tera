@@ -1,11 +1,20 @@
 {% extends "base" %}
 {% block content %}
+
+<p>
+  Current User: {{current_user}}
+  {% if current_user == "None" %}
+    <a href="/login">[login]</a>
+  {% else %}
+    <a href="/logout">[logout]</a>
+  {% endif %}
+</p>
+
 <h3>Users</h3>
 
 {% include "form" %}
 
 <br>
-
 
 <ul>
 {% for user in users %}
