@@ -46,16 +46,29 @@ struct AddDebtData {
 
 const USER_COOKIE_NAME: &'static str = "USER";
 
-fn get<E: DeserializeOwned>(db: &Db, key: &DbKey) -> Result<Option<E>, Box<dyn std::error::Error>> {
-    Ok(match db.get(serialize(key)?)? {
+fn get<E: DeserializeOwned>(db: &Db, key: &str) -> Result<Option<E>, Box<dyn std::error::Error>> {
+    Ok(match db.get(key.as_bytes())? {
         Some(x) => Some(deserialize(&x)?),
         None => None,
     })
 }
 
-fn set<E: Serialize>(db: &Db, key: &DbKey, value: &E) -> Result<(), Box<dyn std::error::Error>> {
-    db.set(serialize(key)?, serialize(value)?)?;
+fn set<E: Serialize>(db: &Db, key: &str, value: &E) -> Result<(), Box<dyn std::error::Error>> {
+    db.set(key.as_bytes(), serialize(value)?)?;
     Ok(())
+}
+
+fn range<'a, E: DeserializeOwned>(
+    db: &'a Db,
+    start: &str,
+    end: &str,
+) -> impl Iterator<Item = Result<(String, E), Box<dyn std::error::Error + 'a>>> {
+    db.range(start.as_bytes()..end.as_bytes()).map(
+        |x| -> Result<(String, E), Box<dyn std::error::Error + 'a>> {
+            let (k, v) = x?;
+            Ok((String::from_utf8(k)?, deserialize(&v)?))
+        },
+    )
 }
 
 #[get("/static/<file..>")]
@@ -66,7 +79,7 @@ fn files(file: PathBuf) -> Result<NamedFile, status::NotFound<()>> {
 
 #[get("/")]
 fn index(base: State<Db>, cookies: Cookies) -> Result<Template, Box<dyn std::error::Error>> {
-    let mut visits = get::<usize>(&base, &DbKey::Visits("HELLO".into()))?.unwrap_or(0);
+    let mut visits = get::<usize>(&base, "Visits/HELLO")?.unwrap_or(0);
     visits += 1;
     #[derive(Serialize)]
     struct User {
@@ -79,7 +92,7 @@ fn index(base: State<Db>, cookies: Cookies) -> Result<Template, Box<dyn std::err
         current_user: String,
         users: Vec<User>,
     }
-    set(&base, &DbKey::Visits("HELLO".into()), &visits)?;
+    set(&base, "Visits/HELLO", &visits)?;
     Ok(Template::render(
         "main",
         &TestContext {
@@ -137,10 +150,7 @@ fn login(
     login_data: Form<LoginData>,
 ) -> Result<String, Box<dyn std::error::Error>> {
     // curl -v -X POST -d 'username=ben&password=pass' http://localhost:8000/login -H "Content-Type: application/x-www-form-urlencoded"
-    let original_password: String = match get(
-        &base,
-        &DbKey::UsernameToPassword(login_data.username.clone()),
-    ) {
+    let original_password: String = match get(&base, &format!("userpass/{}", login_data.username)) {
         Ok(Some(password)) => password,
         _ => return Ok(format!("Bad")),
     };
@@ -193,7 +203,7 @@ fn main() {
     let database = Db::start_default("database").unwrap();
     set(
         &database,
-        &DbKey::UsernameToPassword("ben".to_string()),
+        &"userpass/ben",
         &hash("pass", DEFAULT_COST).unwrap(),
     )
     .unwrap();
