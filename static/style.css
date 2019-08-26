@@ -1,12 +1,29 @@
+/*
+
+662B00
+EA8A46
+
+E66000
+
+663C1F
+B34A00
+
+008C99
+00D2E6
+*/
+
+@import url('https://fonts.googleapis.com/css?family=Hepta+Slab&display=swap');
+
+
 body {
-    background-color: #dedeee;
-    color: #6d4b33;
-    /*background-color: #f3bdff;*/
+    background-color: #EEEEEE;
+    color: #000;
+    font-family: "Hepta Slab";
 }
 
 .red {
-    background-color: #ff5599;
+    background-color: #E66000;
 }
 .black {
-    background-color: #55ff99;
+    background-color: #00D2E6;
 }
