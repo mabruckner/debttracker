@@ -8,7 +8,7 @@ use bcrypt::{hash, verify, DEFAULT_COST};
 use bincode::{deserialize, serialize};
 use rocket::http::{Cookie, Cookies};
 use rocket::request::Form;
-use rocket::response::{status, NamedFile};
+use rocket::response::{status, NamedFile, Redirect};
 use rocket::State;
 use rocket_contrib::templates::Template;
 use serde::de::DeserializeOwned;
@@ -55,7 +55,7 @@ fn index(base: State<Db>) -> Result<Template, Box<dyn std::error::Error>> {
     visits += 1;
     #[derive(Serialize)]
     struct User {
-        name: String,
+        username: String,
         balance: f32,
     }
     #[derive(Serialize)]
@@ -68,10 +68,20 @@ fn index(base: State<Db>) -> Result<Template, Box<dyn std::error::Error>> {
         "main",
         &TestContext {
             count: visits,
-            users: vec![User {
-                name: "Bert".into(),
-                balance: 0.5,
-            }],
+            users: vec![
+                User {
+                    username: "bert".into(),
+                    balance: 0.5,
+                },
+                User {
+                    username: "ben".into(),
+                    balance: 0.5,
+                },
+                User {
+                    username: "mitchell".into(),
+                    balance: 0.5,
+                },
+            ],
         },
     ))
 }
@@ -125,6 +135,13 @@ fn current_user(mut cookies: Cookies) -> Result<String, Box<dyn std::error::Erro
             _ => "None",
         }
     ))
+}
+
+fn check_auth(mut cookies: Cookies) -> Option<Redirect> {
+    if let None = cookies.get_private(USER_COOKIE_NAME) {
+        return Some(Redirect::to(uri!(login)));
+    }
+    return None;
 }
 
 fn main() {

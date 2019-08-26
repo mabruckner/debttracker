@@ -1,0 +1,14 @@
+<form action="submit-debt" method="POST">
+  <select name="user">
+    <option></option>
+    {% for user in users %}
+      <option value="{{user.username}}">{{user.username}}</option>
+    {% endfor %}
+  </select>
+  <select name="owes">
+    <option value="owes">Owes</option>
+    <option value="is-owed">Is Owed</option>
+  </select>
+  <input type="number" name="amount" placeholder="amount" />
+  <input type="submit" />
+</form>
