@@ -17,6 +17,9 @@ use sled::Db;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
+mod money;
+use money::*;
+
 #[derive(Serialize, Deserialize)]
 enum DbKey {
     UsernameToPassword(String),
@@ -56,7 +59,7 @@ fn index(base: State<Db>) -> Result<Template, Box<dyn std::error::Error>> {
     #[derive(Serialize)]
     struct User {
         username: String,
-        balance: f32,
+        balance: String,
     }
     #[derive(Serialize)]
     struct TestContext {
@@ -71,15 +74,15 @@ fn index(base: State<Db>) -> Result<Template, Box<dyn std::error::Error>> {
             users: vec![
                 User {
                     username: "bert".into(),
-                    balance: 0.5,
+                    balance: Money::from_dollars(30).to_string(),
                 },
                 User {
                     username: "ben".into(),
-                    balance: 0.5,
+                    balance: Money::from_dollars(20).to_string(),
                 },
                 User {
                     username: "mitchell".into(),
-                    balance: 0.5,
+                    balance: Money::from_dollars(-20).to_string(),
                 },
             ],
         },

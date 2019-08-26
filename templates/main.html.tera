@@ -9,7 +9,7 @@
 
 <ul>
 {% for user in users %}
-<li>{{user.username}} : <span class="{% if user.balance > 0.0 %}black{% else %}red{% endif %}">{{user.balance}}</span></li>
+<li>{{user.username}} : <span>{{user.balance}}</span></li>
 {% endfor %}
 </ul>
 {% endblock content %}
