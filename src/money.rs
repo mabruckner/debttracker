@@ -7,59 +7,59 @@ use std::ops;
 pub struct Money(i64);
 
 impl Money {
-    pub fn from_cents(cents: i64) -> Money {
-        Money(cents)
-    }
-    pub fn from_dollars(dollars: i64) -> Money {
-        Money(dollars * 100)
-    }
-    pub fn zero() -> Money {
-        Money(0)
-    }
+  pub fn from_cents(cents: i64) -> Money {
+    Money(cents)
+  }
+  pub fn from_dollars(dollars: i64) -> Money {
+    Money(dollars * 100)
+  }
+  pub fn zero() -> Money {
+    Money(0)
+  }
 }
 
 impl fmt::Display for Money {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let sign = match self.0 {
-            x if x > 0 => "+",
-            x if x < 0 => "-",
-            _ => "",
-        };
-        let dollars = (self.0 / 100).abs();
-        let cents = self.0.abs() % 100;
-        write!(f, "{}${}.{:0>2}", sign, dollars, cents)
-    }
+  fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+    let sign = match self.0 {
+      x if x > 0 => "+",
+      x if x < 0 => "-",
+      _ => "",
+    };
+    let dollars = (self.0 / 100).abs();
+    let cents = self.0.abs() % 100;
+    write!(f, "{}${}.{:0>2}", sign, dollars, cents)
+  }
 }
 
 impl ops::Add for Money {
-    type Output = Self;
-    fn add(self, other: Self) -> Self {
-        Money(self.0 + other.0)
-    }
+  type Output = Self;
+  fn add(self, other: Self) -> Self {
+    Money(self.0 + other.0)
+  }
 }
 
 impl ops::Sub for Money {
-    type Output = Self;
-    fn sub(self, other: Self) -> Self {
-        Money(self.0 - other.0)
-    }
+  type Output = Self;
+  fn sub(self, other: Self) -> Self {
+    Money(self.0 - other.0)
+  }
 }
 
 impl ops::Neg for Money {
-    type Output = Self;
-    fn neg(self) -> Self {
-        Money(-self.0)
-    }
+  type Output = Self;
+  fn neg(self) -> Self {
+    Money(-self.0)
+  }
 }
 
 impl Ord for Money {
-    fn cmp(&self, other: &Self) -> Ordering {
-        self.0.cmp(&other.0)
-    }
+  fn cmp(&self, other: &Self) -> Ordering {
+    self.0.cmp(&other.0)
+  }
 }
 
 impl PartialOrd for Money {
-    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        Some(self.cmp(other))
-    }
+  fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+    Some(self.cmp(other))
+  }
 }
