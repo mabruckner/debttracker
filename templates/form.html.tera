@@ -5,9 +5,9 @@
       <option value="{{user.username}}">{{user.username}}</option>
     {% endfor %}
   </select>
-  <select name="owes">
-    <option value="Owes">Owes</option>
-    <option value="IsOwed">Is Owed</option>
+  <select name="owe_direction">
+    <option value="owes">Owes</option>
+    <option value="is_owed">Is Owed</option>
   </select>
   <input type="number" name="amount" placeholder="amount" />
   <input type="submit" />

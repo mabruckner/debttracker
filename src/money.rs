@@ -1,3 +1,4 @@
+use failure::{format_err, Error, Fail};
 use serde::{Deserialize, Serialize};
 use std::cmp::Ordering;
 use std::fmt;
@@ -10,9 +11,29 @@ impl Money {
   pub fn from_cents(cents: i64) -> Money {
     Money(cents)
   }
+
   pub fn from_dollars(dollars: i64) -> Money {
     Money(dollars * 100)
   }
+
+  pub fn from_money_string(string: String) -> Result<Money, Error> {
+    let clean_string = string.replace("$", "");
+    let parts: Vec<&str> = clean_string.split(".").collect();
+
+    if parts.len() == 1 {
+      Ok(Money::from_dollars(parts[0].parse()?))
+    } else if parts.len() == 2 {
+      let dollars = Money::from_dollars(parts[0].parse()?);
+      let cents = Money::from_cents(parts[1].parse()?);
+      Ok(dollars + cents)
+    } else {
+      Err(format_err!(
+        "Money amount not of form x.xx or x: {}",
+        string
+      ))
+    }
+  }
+
   pub fn zero() -> Money {
     Money(0)
   }

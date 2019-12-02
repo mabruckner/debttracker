@@ -1,8 +1,10 @@
 #![feature(proc_macro_hygiene, decl_macro)]
 
+extern crate bcrypt;
 #[macro_use]
 extern crate rocket;
-extern crate bcrypt;
+#[macro_use]
+extern crate failure;
 
 use bcrypt::{hash, verify, DEFAULT_COST};
 use bincode::{deserialize, serialize};
@@ -16,19 +18,29 @@ use serde::{Deserialize, Serialize};
 use sled::Db;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
+use std::time::SystemTime;
 
 mod money;
 use money::*;
 
-#[derive(Serialize, Deserialize)]
-enum DbKey {
-  UsernameToPassword(String),
-  Visits(String),
-  Debt {
-    owee: String,
-    ower: String,
-    amount: String,
-  },
+#[derive(Debug, Serialize, Deserialize)]
+struct Debt {
+  creditor: String,
+  debtor: String,
+  time: SystemTime,
+  amount: Money,
+}
+
+impl Debt {
+  /// Swap owee/ower and negate amount
+  fn clone_negated(&self) -> Debt {
+    Debt {
+      creditor: self.debtor.clone(),
+      debtor: self.creditor.clone(),
+      time: self.time.clone(),
+      amount: -self.amount.clone(),
+    }
+  }
 }
 
 #[derive(Debug, FromForm)]
@@ -40,7 +52,7 @@ struct LoginData {
 #[derive(Debug, FromForm)]
 struct AddDebtData {
   user: String,
-  owes: String,
+  owe_direction: String,
   amount: String,
 }
 
@@ -80,8 +92,12 @@ fn files(file: PathBuf) -> Result<NamedFile, status::NotFound<()>> {
 #[get("/")]
 fn index(base: State<Db>, cookies: Cookies) -> Result<Template, Box<dyn std::error::Error>> {
   let mut visits = get::<usize>(&base, "Visits/HELLO")?.unwrap_or(0);
+  let debts = range::<Debt>(&base, "debts/", "debts/~");
+  for debt in debts {
+    println!("{:?}", debt);
+  }
   visits += 1;
-  #[derive(Serialize)]
+  #[derive(Debug, Serialize)]
   struct User {
     username: String,
     balance: String,
@@ -123,14 +139,35 @@ fn add_debt(
   add_debt_data: Form<AddDebtData>,
 ) -> Result<Redirect, Box<dyn std::error::Error>> {
   println!("Saving {:?}", add_debt_data);
+  let now = SystemTime::now();
+  let nanos = now.duration_since(SystemTime::UNIX_EPOCH)?.as_nanos();
+
+  let current_user = get_current_user(cookies).unwrap_or("None".to_string());
+  let other_user = add_debt_data.user.clone();
+  let owe_direction = add_debt_data.owe_direction.clone();
+
+  let debtor;
+  let creditor;
+  if owe_direction == "owes" {
+    creditor = current_user;
+    debtor = other_user;
+  } else {
+    debtor = current_user;
+    creditor = other_user;
+  }
+
+  let debt = Debt {
+    creditor: creditor.clone(),
+    debtor: debtor.clone(),
+    amount: Money::from_money_string(add_debt_data.amount.clone())?,
+    time: now,
+  };
+
+  set(&base, &format!("debts/{}/{}", creditor, nanos), &debt).unwrap();
   set(
     &base,
-    &DbKey::Debt {
-      owee: add_debt_data.user.clone(),
-      ower: "ower".to_string(),
-      amount: add_debt_data.amount.clone(),
-    },
-    &hash("pass", DEFAULT_COST).unwrap(),
+    &format!("debts/{}/{}", debtor, nanos),
+    &debt.clone_negated(),
   )
   .unwrap();
 
