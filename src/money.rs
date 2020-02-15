@@ -37,6 +37,10 @@ impl Money {
   pub fn zero() -> Money {
     Money(0)
   }
+
+  pub fn to_cents(&self) -> i64 {
+    self.0
+  }
 }
 
 impl fmt::Display for Money {

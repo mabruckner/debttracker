@@ -75,8 +75,8 @@ fn init_database(conn: &Connection) {
                   id              INTEGER PRIMARY KEY,
                   debtor          TEXT NOT NULL,
                   creditor        TEXT NOT NULL,
-                  amount          TEXT NOT NULL,
-                  time            TIME NOT NULL
+                  amount          FLOAT NOT NULL,
+                  time            STRING NOT NULL
                   )",
       &[] as &[&dyn ToSql],
     )
@@ -151,6 +151,7 @@ fn index(cookies: Cookies) -> Result<Template, Box<dyn std::error::Error>> {
 
 #[post("/add-debt", data = "<add_debt_data>")]
 fn add_debt(
+  db_conn: State<'_, DbConn>,
   mut cookies: Cookies,
   add_debt_data: Form<AddDebtData>,
 ) -> Result<Redirect, Box<dyn std::error::Error>> {
@@ -171,21 +172,15 @@ fn add_debt(
     debtor = current_user;
     creditor = other_user;
   }
+  let amount = Money::from_money_string(add_debt_data.amount.clone())?;
 
-  let debt = Debt {
-    creditor: creditor.clone(),
-    debtor: debtor.clone(),
-    amount: Money::from_money_string(add_debt_data.amount.clone())?,
-    time: now,
-  };
-
-  // set(&base, &format!("debts/{}/{}", creditor, nanos), &debt).unwrap();
-  // set(
-  //   &base,
-  //   &format!("debts/{}/{}", debtor, nanos),
-  //   &debt.clone_negated(),
-  // )
-  // .unwrap();
+  let session = db_conn.lock().unwrap();
+  session
+    .execute(
+      "INSERT INTO debts (debtor, creditor, amount, time) VALUES (?1, ?2, ?3, ?4)",
+      params![debtor, creditor, amount.to_cents(), nanos.to_string()],
+    )
+    .unwrap();
 
   Ok(Redirect::to(uri!(index)))
 }
