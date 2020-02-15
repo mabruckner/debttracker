@@ -13,15 +13,19 @@ use rocket::request::Form;
 use rocket::response::{status, NamedFile, Redirect};
 use rocket::State;
 use rocket_contrib::templates::Template;
+use rusqlite::types::ToSql;
+use rusqlite::{params, Connection, Error};
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
-use sled::Db;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
+use std::sync::Mutex;
 use std::time::SystemTime;
 
 mod money;
 use money::*;
+
+type DbConn = Mutex<Connection>;
 
 #[derive(Debug, Serialize, Deserialize)]
 struct Debt {
@@ -56,31 +60,51 @@ struct AddDebtData {
   amount: String,
 }
 
+#[derive(Debug)]
+struct User {
+  username: String,
+  password: String,
+}
+
 const USER_COOKIE_NAME: &'static str = "USER";
 
-fn get<E: DeserializeOwned>(db: &Db, key: &str) -> Result<Option<E>, Box<dyn std::error::Error>> {
-  Ok(match db.get(key.as_bytes())? {
-    Some(x) => Some(deserialize(&x)?),
-    None => None,
-  })
-}
+fn init_database(conn: &Connection) {
+  conn
+    .execute(
+      "CREATE TABLE debts (
+                  id              INTEGER PRIMARY KEY,
+                  debtor          TEXT NOT NULL,
+                  creditor        TEXT NOT NULL,
+                  amount          TEXT NOT NULL,
+                  time            TIME NOT NULL
+                  )",
+      &[] as &[&dyn ToSql],
+    )
+    .expect("create debts table");
 
-fn set<E: Serialize>(db: &Db, key: &str, value: &E) -> Result<(), Box<dyn std::error::Error>> {
-  db.set(key.as_bytes(), serialize(value)?)?;
-  Ok(())
-}
+  conn
+    .execute(
+      "CREATE TABLE users (
+                  id              INTEGER PRIMARY KEY,
+                  username        TEXT NOT NULL,
+                  password        TEXT NOT NULL
+                  )",
+      &[] as &[&dyn ToSql],
+    )
+    .expect("create debts table");
 
-fn range<'a, E: DeserializeOwned>(
-  db: &'a Db,
-  start: &str,
-  end: &str,
-) -> impl Iterator<Item = Result<(String, E), Box<dyn std::error::Error + 'a>>> {
-  db.range(start.as_bytes()..end.as_bytes()).map(
-    |x| -> Result<(String, E), Box<dyn std::error::Error + 'a>> {
-      let (k, v) = x?;
-      Ok((String::from_utf8(k)?, deserialize(&v)?))
-    },
-  )
+  conn
+    .execute(
+      "INSERT INTO users (username, password) VALUES ($1, $2)",
+      &[&"ben", hash("pass", DEFAULT_COST).unwrap().as_str()],
+    )
+    .unwrap();
+  conn
+    .execute(
+      "INSERT INTO users (username, password) VALUES ($1, $2)",
+      &[&"mitchell", hash("pass", DEFAULT_COST).unwrap().as_str()],
+    )
+    .unwrap();
 }
 
 #[get("/static/<file..>")]
@@ -90,13 +114,7 @@ fn files(file: PathBuf) -> Result<NamedFile, status::NotFound<()>> {
 }
 
 #[get("/")]
-fn index(base: State<Db>, cookies: Cookies) -> Result<Template, Box<dyn std::error::Error>> {
-  let mut visits = get::<usize>(&base, "Visits/HELLO")?.unwrap_or(0);
-  let debts = range::<Debt>(&base, "debts/", "debts/~");
-  for debt in debts {
-    println!("{:?}", debt);
-  }
-  visits += 1;
+fn index(cookies: Cookies) -> Result<Template, Box<dyn std::error::Error>> {
   #[derive(Debug, Serialize)]
   struct User {
     username: String,
@@ -108,11 +126,10 @@ fn index(base: State<Db>, cookies: Cookies) -> Result<Template, Box<dyn std::err
     current_user: String,
     users: Vec<User>,
   }
-  set(&base, "Visits/HELLO", &visits)?;
   Ok(Template::render(
     "main",
     &TestContext {
-      count: visits,
+      count: 1,
       current_user: get_current_user(cookies).unwrap_or("None".to_string()),
       users: vec![
         User {
@@ -135,7 +152,6 @@ fn index(base: State<Db>, cookies: Cookies) -> Result<Template, Box<dyn std::err
 #[post("/add-debt", data = "<add_debt_data>")]
 fn add_debt(
   mut cookies: Cookies,
-  base: State<Db>,
   add_debt_data: Form<AddDebtData>,
 ) -> Result<Redirect, Box<dyn std::error::Error>> {
   println!("Saving {:?}", add_debt_data);
@@ -163,13 +179,13 @@ fn add_debt(
     time: now,
   };
 
-  set(&base, &format!("debts/{}/{}", creditor, nanos), &debt).unwrap();
-  set(
-    &base,
-    &format!("debts/{}/{}", debtor, nanos),
-    &debt.clone_negated(),
-  )
-  .unwrap();
+  // set(&base, &format!("debts/{}/{}", creditor, nanos), &debt).unwrap();
+  // set(
+  //   &base,
+  //   &format!("debts/{}/{}", debtor, nanos),
+  //   &debt.clone_negated(),
+  // )
+  // .unwrap();
 
   Ok(Redirect::to(uri!(index)))
 }
@@ -182,21 +198,32 @@ fn login_form() -> Result<Template, Box<dyn std::error::Error>> {
 
 #[post("/login", data = "<login_data>")]
 fn login(
+  db_conn: State<'_, DbConn>,
   mut cookies: Cookies,
-  base: State<Db>,
   login_data: Form<LoginData>,
 ) -> Result<String, Box<dyn std::error::Error>> {
   // curl -v -X POST -d 'username=ben&password=pass' http://localhost:8000/login -H "Content-Type: application/x-www-form-urlencoded"
-  let original_password: String = match get(&base, &format!("userpass/{}", login_data.username)) {
-    Ok(Some(password)) => password,
-    _ => return Ok(format!("Bad")),
-  };
+  let session = db_conn.lock().unwrap();
+  let mut stmt = session.prepare("SELECT username, password FROM users WHERE username='ben'")?;
 
-  let is_password_correct = verify(&login_data.password, &original_password);
+  let user = stmt
+    .query_map(params![], |row| {
+      Ok(User {
+        username: row.get(0)?,
+        password: row.get(1)?,
+      })
+    })?
+    .next();
 
-  if is_password_correct.unwrap_or(false) {
-    cookies.add_private(Cookie::new(USER_COOKIE_NAME, login_data.username.clone()));
-    Ok(format!("Good"))
+  if let Some(user) = user {
+    let is_password_correct = verify(&login_data.password, &user?.password);
+
+    if is_password_correct.unwrap_or(false) {
+      cookies.add_private(Cookie::new(USER_COOKIE_NAME, login_data.username.clone()));
+      Ok(format!("Good"))
+    } else {
+      Ok(format!("Bad"))
+    }
   } else {
     Ok(format!("Bad"))
   }
@@ -237,15 +264,12 @@ fn get_current_user(mut cookies: Cookies) -> Option<String> {
 }
 
 fn main() {
-  let database = Db::start_default("database").unwrap();
-  set(
-    &database,
-    &"userpass/ben",
-    &hash("pass", DEFAULT_COST).unwrap(),
-  )
-  .unwrap();
+  let conn = Connection::open_in_memory().expect("in memory db");
+
+  init_database(&conn);
 
   rocket::ignite()
+    .manage(Mutex::new(conn))
     .mount(
       "/",
       routes![
@@ -258,7 +282,6 @@ fn main() {
         add_debt
       ],
     )
-    .manage(database)
     .attach(Template::fairing())
     .launch();
   print!("ENDING");
