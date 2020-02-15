@@ -16,9 +16,33 @@ B34A00
 
 
 body {
-    background-color: #EEEEEE;
+    background-color: #DDD;
     color: #000;
     font-family: "Hepta Slab";
+}
+
+.container {
+    background-color: #FFF;
+    margin: auto;
+    margin-top: 5mm;
+    width: 80%;
+    padding: 10mm;
+}
+
+table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: auto;
+}
+
+tbody tr:nth-child(even) {
+    background-color: #EEE;
+}
+
+th {
+    border-bottom: 5px solid black;
+}
+td {
 }
 
 .red {

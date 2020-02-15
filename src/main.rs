@@ -24,11 +24,13 @@ use std::time::SystemTime;
 
 mod money;
 use money::*;
+mod data;
+use data::*;
 
 type DbConn = Mutex<Connection>;
 
 #[derive(Debug, Serialize, Deserialize)]
-struct Debt {
+pub struct Debt {
   creditor: String,
   debtor: String,
   time: SystemTime,
@@ -125,26 +127,16 @@ fn index(cookies: Cookies) -> Result<Template, Box<dyn std::error::Error>> {
     count: usize,
     current_user: String,
     users: Vec<User>,
+    debts: Vec<Debt>,
   }
+  let current_username =  get_current_user(cookies).unwrap_or("None".to_string());
   Ok(Template::render(
     "main",
     &TestContext {
-      count: 1,
-      current_user: get_current_user(cookies).unwrap_or("None".to_string()),
-      users: vec![
-        User {
-          username: "bert".into(),
-          balance: Money::from_dollars(30).to_string(),
-        },
-        User {
-          username: "ben".into(),
-          balance: Money::from_dollars(20).to_string(),
-        },
-        User {
-          username: "mitchell".into(),
-          balance: Money::from_dollars(-20).to_string(),
-        },
-      ],
+      count: 0,
+      current_user: current_username.clone(),
+      users: get_users().into_iter().map(|x| { User { username: x, balance: Money::from_dollars(0).to_string() } }).collect(),
+      debts: get_debts_involving(&current_username)
     },
   ))
 }
@@ -257,6 +249,8 @@ fn get_current_user(mut cookies: Cookies) -> Option<String> {
     _ => None,
   }
 }
+
+
 
 fn main() {
   let conn = Connection::open_in_memory().expect("in memory db");

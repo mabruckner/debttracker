@@ -21,4 +21,6 @@
 <li>{{user.username}} : <span>{{user.balance}}</span></li>
 {% endfor %}
 </ul>
+
+{% include "list" %}
 {% endblock content %}

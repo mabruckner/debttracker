@@ -1,0 +1,10 @@
+<table>
+<thead>
+<tr><th>Debtor</th><th>Creditor</th><th>Amount</th></tr>
+</thead>
+<tbody>
+{% for debt in debts %}
+<tr><td>{{ debt.debtor }}</td><td>{{ debt.creditor }}</td><td>$0</td></tr>
+{% endfor %}
+<tbody>
+</table>
